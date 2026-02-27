@@ -1,0 +1,44 @@
+# ── Frontend ──────────────────────────────────────────────
+node_modules/
+dist/
+.vite/
+
+# ── Backend ───────────────────────────────────────────────
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/**/*.pyc
+*.pyc
+__pycache__/
+
+# ── Database (SQLite) ──────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Environment / Secrets ─────────────────────────────────
+.env
+.env.local
+.env.production
+.env.*
+
+# ── Logs ──────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pip-log.txt
+
+# ── Editor ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ── OS ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Misc ──────────────────────────────────────────────────
+*.pem
