@@ -164,23 +164,60 @@ function scoreAnswers(answers: AnswerRecord[]): SoftSkillScores {
   return { clarity, confidence, depth, fluency, overall };
 }
 
-// ─── Animated Score Arc ───────────────────────────────────────────────────────
+// ─── Animated Score Arc (Living Doodle Gauge) ────────────────────────────────────
 function ScoreArc({ score, label, color, size = 90 }: { score: number; label: string; color: string; size?: number }) {
   const r = size * 0.38;
   const cx = size / 2;
   const cy = size / 2;
   const circ = 2 * Math.PI * r;
-  const dash = (score / 100) * circ;
+
+  // Use a state-driven target dash to trigger React CSS transition
+  const [dash, setDash] = useState(0);
+  useEffect(() => {
+    // Slight delay for fluid entrance
+    const t = setTimeout(() => setDash((score / 100) * circ), 100);
+    return () => clearTimeout(t);
+  }, [score, circ]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-      <svg width={size} height={size}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={8} />
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={8}
-          strokeDasharray={`${dash} ${circ}`} strokeDashoffset={circ * 0.25}
-          strokeLinecap="round" style={{ transition: "stroke-dasharray 1s ease" }} />
-        <text x={cx} y={cy + 5} textAnchor="middle" fill="#fff" fontSize={size * 0.18} fontWeight={700}>{score}</text>
-      </svg>
-      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>
+      <div style={{ position: "relative", width: size, height: size }}>
+        {/* Continuous slow rotation via CSS -- creates the living doodle effect */}
+        <style>
+          {`
+            @keyframes slowSpin1 { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            @keyframes slowSpin2 { from { transform: rotate(90deg); } to { transform: rotate(-270deg); } }
+            `}
+        </style>
+
+        {/* Background track */}
+        <svg width={size} height={size} style={{ position: "absolute", top: 0, left: 0 }}>
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={8} />
+        </svg>
+
+        {/* Outer overlapping doodle ring 1 */}
+        <svg width={size} height={size} style={{ position: "absolute", top: 0, left: 0, animation: "slowSpin1 40s linear infinite", opacity: 0.4 }}>
+          <circle cx={cx} cy={cy} r={r + 2} fill="none" stroke={color} strokeWidth={2}
+            strokeDasharray={`${dash * 0.9} ${circ}`} strokeDashoffset={circ * 0.25}
+            strokeLinecap="round" style={{ transition: "stroke-dasharray 1.5s cubic-bezier(0.2, 0.8, 0.2, 1)" }} />
+        </svg>
+
+        {/* Outer overlapping doodle ring 2 */}
+        <svg width={size} height={size} style={{ position: "absolute", top: 0, left: 0, animation: "slowSpin2 35s linear infinite", opacity: 0.3 }}>
+          <circle cx={cx} cy={cy} r={r - 2} fill="none" stroke={color} strokeWidth={2}
+            strokeDasharray={`${dash * 1.1} ${circ}`} strokeDashoffset={circ * 0.5}
+            strokeLinecap="round" style={{ transition: "stroke-dasharray 1.5s cubic-bezier(0.2, 0.8, 0.2, 1)" }} />
+        </svg>
+
+        {/* Main Score Arc */}
+        <svg width={size} height={size} style={{ position: "absolute", top: 0, left: 0 }}>
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={6}
+            strokeDasharray={`${dash} ${circ}`} strokeDashoffset={circ * 0.25}
+            strokeLinecap="round" style={{ transition: "stroke-dasharray 1.5s cubic-bezier(0.2, 0.8, 0.2, 1)" }} />
+          <text x={cx} y={cy + 5} textAnchor="middle" fill="#fff" fontSize={size * 0.18} fontWeight={800}>{score}</text>
+        </svg>
+      </div>
+      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>
     </div>
   );
 }
@@ -215,6 +252,9 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
   const sessionActiveRef = useRef(false);
   const isListeningRef = useRef(false);
   const isSpeakingRef = useRef(false);
+  // startRecognitionRef — lets onend call startRecognition() to get a FRESH instance each cycle
+  // (Chrome silently rejects calling .start() on the same ended SpeechRecognition object)
+  const startRecognitionRef = useRef<() => void>(() => { });
   // Audio meter canvas
   const meterCanvasRef = useRef<HTMLCanvasElement>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -316,6 +356,8 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
     rec.interimResults = true;
     rec.lang = "en-US";
     rec.maxAlternatives = 1;
+    // Tell the browser we want fast, short results
+    // (not a standard spec property but Chrome respects it implicitly with continuous=true)
 
     rec.onstart = () => {
       isListeningRef.current = true;
@@ -349,19 +391,16 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
       // All other errors (no-speech, aborted, network) → onend fires next and handles restart
     };
 
-    // SINGLE restart path — only restart here, never in onerror
+    // SINGLE restart path — always create a FRESH instance (never reuse ended object)
     rec.onend = () => {
       isSpeakingRef.current = false;
       setInterimTranscript("");
       if (sessionActiveRef.current) {
-        // Keep isListening=true during restart gap so mic indicator stays green
+        // 150ms breathing room before Chrome re-acquires the mic
         setTimeout(() => {
-          if (sessionActiveRef.current && recognitionRef.current) {
-            try { recognitionRef.current.start(); } catch { }
-          }
-        }, 300);
+          if (sessionActiveRef.current) startRecognitionRef.current();
+        }, 150);
       } else {
-        // Session ended — update state to reflect mic is off
         isListeningRef.current = false;
         setIsListening(false);
       }
@@ -372,6 +411,9 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
       console.warn("[Interview] Could not start recognition:", e);
     }
   }, []);
+
+  // Keep ref in sync so onend closure always calls the latest startRecognition
+  startRecognitionRef.current = startRecognition;
 
   // ── Session Control ────────────────────────────────────────────────────────
   const startSession = useCallback(() => {
@@ -733,19 +775,23 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
                 </div>
               </div>
               <div style={{ fontSize: 14, color: T.text, lineHeight: 1.8, minHeight: 80 }}>
-                {transcript
-                  ? <span>{transcript}</span>
-                  : <span style={{ color: T.muted }}>{isListening ? "Start speaking — your words will appear here…" : "Enable microphone to begin"}</span>
+                {(transcript || interimTranscript)
+                  ? (
+                    <span>
+                      {transcript}
+                      {/* Interim shown at full opacity inline — feels instant, not "pending" */}
+                      <span style={{ color: T.text, opacity: interimTranscript ? 1 : 0 }}>{interimTranscript}</span>
+                    </span>
+                  )
+                  : <span style={{ color: T.muted }}>{isListening ? "Speak now — words appear as you talk…" : "Enable microphone to begin"}</span>
                 }
-                {interimTranscript && (
-                  <span style={{ color: T.accent, fontStyle: "italic", opacity: 0.75 }}> {interimTranscript}</span>
-                )}
               </div>
-              {transcript && (
+              {(transcript || interimTranscript) && (
                 <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${T.border}`, display: "flex", gap: 16, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11, color: T.muted }}>Words: <strong style={{ color: T.text }}>{transcript.split(/\s+/).filter(Boolean).length}</strong></span>
+                  {/* Count interim words too so stats update live as you speak */}
+                  <span style={{ fontSize: 11, color: T.muted }}>Words: <strong style={{ color: T.text }}>{(transcript + " " + interimTranscript).split(/\s+/).filter(Boolean).length}</strong></span>
                   <span style={{ fontSize: 11, color: T.muted }}>Fillers: <strong style={{ color: countFillers(transcript) > 5 ? "#f59e0b" : T.accent3 }}>{countFillers(transcript)}</strong></span>
-                  <span style={{ fontSize: 11, color: T.muted }}>Tech terms: <strong style={{ color: T.accent }}>{countTechWords(transcript)}</strong></span>
+                  <span style={{ fontSize: 11, color: T.muted }}>Tech terms: <strong style={{ color: T.accent }}>{countTechWords(transcript + " " + interimTranscript)}</strong></span>
                 </div>
               )}
             </div>
@@ -768,19 +814,71 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
   // ══════════════════════════════════════════════════════════════════════════
   // PHASE: REPORT
   // ══════════════════════════════════════════════════════════════════════════
+
+  // Derived coaching insights
+  const totalDuration = answers.reduce((s, a) => s + a.durationSec, 0);
+  const avgWords = answers.length ? answers.reduce((s, a) => s + a.wordCount, 0) / answers.length : 0;
+  const totalFillers = answers.reduce((s, a) => s + a.fillerCount, 0);
+  const avgWPM = totalDuration > 0 ? (answers.reduce((s, a) => s + a.wordCount, 0) / totalDuration) * 60 : 0;
+
+  const grade = scores.overall >= 80 ? { g: "A", label: "Excellent", color: "#22c55e" }
+    : scores.overall >= 65 ? { g: "B", label: "Good", color: T.accent }
+      : scores.overall >= 50 ? { g: "C", label: "Average", color: "#f59e0b" }
+        : { g: "D", label: "Needs Work", color: "#ef4444" };
+
+  const coachingTips: Record<string, string> = {
+    clarity: scores.clarity >= 70
+      ? "✅ Great answer length — you stayed focused and concise."
+      : scores.clarity < 40
+        ? "⚠️ Answers were too short. Aim for 100–150 words per answer using the STAR method."
+        : "💡 Try structuring each answer with: Situation → Task → Action → Result.",
+    confidence: scores.confidence >= 70
+      ? "✅ Low filler word usage — you came across as confident and composed."
+      : totalFillers > 15
+        ? `⚠️ High filler words (${totalFillers} total). Practice pausing silently instead of saying "um" or "like".`
+        : "💡 Replace filler words with deliberate pauses — it sounds more authoritative.",
+    depth: scores.depth >= 70
+      ? "✅ Great use of technical terminology — shows domain expertise."
+      : "⚠️ Use more technical terms specific to your stack. Mention tools, libraries, and metrics.",
+    fluency: avgWPM > 150
+      ? "⚠️ You spoke quickly — slow down slightly for clarity and emphasis."
+      : avgWPM < 80 && avgWPM > 0
+        ? "⚠️ Speaking pace was slow. Aim for 120–140 WPM to sound natural."
+        : "✅ Good speaking pace — natural and easy to follow.",
+  };
+
+  const strengths = Object.entries(coachingTips).filter(([, v]) => v.startsWith("✅")).map(([k]) => k);
+  const improvements = Object.entries(coachingTips).filter(([, v]) => v.startsWith("⚠️")).map(([k]) => k);
+
+  function answerRating(a: AnswerRecord): { emoji: string; label: string; color: string } {
+    const score = Math.min(100, (a.wordCount / 120) * 40 + (1 - Math.min(a.fillerCount / Math.max(a.wordCount, 1) * 10, 1)) * 30 + Math.min(a.techKeywords / 5, 1) * 30);
+    if (score >= 70) return { emoji: "🌟", label: "Strong", color: "#22c55e" };
+    if (score >= 45) return { emoji: "👍", label: "Good", color: T.accent };
+    if (a.wordCount < 20) return { emoji: "📝", label: "Too short", color: "#f59e0b" };
+    return { emoji: "💬", label: "Needs work", color: "#ef4444" };
+  }
+
   return (
     <div style={{ padding: "8px 0" }}>
-      {/* Header */}
-      <div style={{ background: `linear-gradient(135deg, ${T.accent}22, #7c3aed22)`, borderRadius: 20, padding: "28px 32px", marginBottom: 24, textAlign: "center" }}>
-        <div style={{ fontSize: 40, marginBottom: 8 }}>🏁</div>
-        <h2 style={{ fontSize: 26, fontWeight: 800, color: T.text, margin: 0 }}>Interview Complete!</h2>
-        <p style={{ color: T.muted, marginTop: 6, fontSize: 14 }}>
-          {answers.length} question{answers.length !== 1 ? "s" : ""} answered · {Math.round(answers.reduce((s, a) => s + a.durationSec, 0) / 60)} min {Math.round(answers.reduce((s, a) => s + a.durationSec, 0) % 60)} sec total
-        </p>
+      {/* ── Hero Result Banner ── */}
+      <div style={{ background: `linear-gradient(135deg, ${grade.color}22, ${T.accent}22)`, border: `1px solid ${grade.color}40`, borderRadius: 20, padding: "28px 32px", marginBottom: 24, display: "flex", alignItems: "center", gap: 32 }}>
+        <div style={{ width: 90, height: 90, borderRadius: "50%", background: `linear-gradient(135deg, ${grade.color}, ${grade.color}99)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, fontWeight: 900, color: "#fff", flexShrink: 0, boxShadow: `0 8px 24px ${grade.color}50` }}>
+          {grade.g}
+        </div>
+        <div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: T.text }}>{grade.label} Performance</div>
+          <div style={{ fontSize: 14, color: T.muted, marginTop: 4 }}>
+            Overall score: <strong style={{ color: grade.color }}>{scores.overall}/100</strong> · {answers.length} question{answers.length !== 1 ? "s" : ""} · {Math.round(totalDuration / 60)}m {Math.round(totalDuration % 60)}s · ~{Math.round(avgWPM)} WPM
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            {strengths.map(s => <span key={s} style={{ background: "#22c55e20", color: "#22c55e", borderRadius: 8, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>✅ Strong: {s}</span>)}
+            {improvements.map(s => <span key={s} style={{ background: "#f59e0b20", color: "#f59e0b", borderRadius: 8, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>📌 Improve: {s}</span>)}
+          </div>
+        </div>
       </div>
 
-      {/* Score arcs */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginBottom: 24 }}>
+      {/* ── Score Cards with coaching ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 24 }}>
         {[
           { key: "overall", label: "Overall", color: T.accent },
           { key: "clarity", label: "Clarity", color: "#22c55e" },
@@ -788,37 +886,119 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
           { key: "depth", label: "Depth", color: "#6366f1" },
           { key: "fluency", label: "Fluency", color: "#ec4899" },
         ].map(({ key, label, color }) => (
-          <div key={key} style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 16, padding: "20px 10px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div key={key} style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 16, padding: "18px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
             <ScoreArc score={scores[key as keyof SoftSkillScores]} label={label} color={color} />
+            {key !== "overall" && (
+              <div style={{ fontSize: 10, color: T.muted, textAlign: "center", lineHeight: 1.4, paddingTop: 4, borderTop: `1px solid ${T.border}`, width: "100%" }}>
+                {coachingTips[key]?.split(" ").slice(1, 6).join(" ")}…
+              </div>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Answer review */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+        {/* ── Coaching Insights ── */}
+        <div style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 16, padding: "22px 24px" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 16 }}>🎯 AI Coaching Feedback</div>
+          {Object.entries(coachingTips).map(([key, tip]) => (
+            <div key={key} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${T.border}20` }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{key}</div>
+              <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6 }}>{tip}</div>
+            </div>
+          ))}
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>📋 Action Plan</div>
+            {improvements.length === 0
+              ? <div style={{ fontSize: 13, color: "#22c55e" }}>🎉 Excellent session! Keep practising to maintain consistency.</div>
+              : improvements.map(area => (
+                <div key={area} style={{ fontSize: 12, color: T.muted, marginBottom: 6, display: "flex", gap: 8 }}>
+                  <span style={{ color: T.accent }}>→</span>
+                  <span>Record yourself and review for <strong style={{ color: T.text }}>{area}</strong> next session</span>
+                </div>
+              ))
+            }
+          </div>
+        </div>
+
+        {/* ── Stats snapshot ── */}
+        <div style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 16, padding: "22px 24px" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 16 }}>📊 Session Statistics</div>
+          {[
+            { label: "Total Questions", value: answers.length, color: T.accent },
+            { label: "Avg Answer Length", value: `${Math.round(avgWords)} words`, color: "#22c55e" },
+            { label: "Total Filler Words", value: totalFillers, color: totalFillers > 15 ? "#ef4444" : "#f59e0b" },
+            { label: "Speaking Pace", value: `${Math.round(avgWPM)} WPM`, color: avgWPM >= 110 && avgWPM <= 160 ? "#22c55e" : "#f59e0b" },
+            { label: "Total Tech Terms Used", value: answers.reduce((s, a) => s + a.techKeywords, 0), color: "#6366f1" },
+            { label: "Total Words Spoken", value: answers.reduce((s, a) => s + a.wordCount, 0), color: T.accent3 },
+          ].map(row => (
+            <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: `1px solid ${T.border}20` }}>
+              <span style={{ fontSize: 13, color: T.muted }}>{row.label}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: row.color }}>{row.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Per-Answer Review ── */}
       <div style={{ background: T.cardBg, border: `1px solid ${T.border}`, borderRadius: 16, padding: "22px 24px", marginBottom: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 16 }}>📋 Answer Review</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 16 }}>📋 Answer-by-Answer Review</div>
         {answers.length === 0 && (
-          <div style={{ color: T.muted, fontSize: 13 }}>No answers recorded. Enable microphone and speak during the session.</div>
-        )}
-        {answers.map((a, i) => (
-          <div key={i} style={{ borderBottom: i < answers.length - 1 ? `1px solid ${T.border}` : "none", paddingBottom: 16, marginBottom: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span style={{ background: CAT_COLORS[a.question.category] + "20", color: CAT_COLORS[a.question.category], borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
-                {CAT_LABELS[a.question.category]}
-              </span>
-              <span style={{ fontSize: 11, color: T.muted }}>{Math.round(a.durationSec)}s · {a.wordCount} words · {a.fillerCount} fillers · {a.techKeywords} tech terms</span>
-            </div>
-            <div style={{ fontSize: 13, color: T.muted, marginBottom: 6, fontStyle: "italic" }}>{a.question.text}</div>
-            <div style={{ fontSize: 13, color: T.text, lineHeight: 1.65, background: T.inputBg || T.border + "30", borderRadius: 8, padding: "10px 12px" }}>
-              {a.transcript || <span style={{ color: T.muted, fontStyle: "italic" }}>No transcript recorded</span>}
-            </div>
+          <div style={{ color: T.muted, fontSize: 13, padding: "20px 0", textAlign: "center" }}>
+            No answers were recorded. Make sure your microphone is enabled and you speak during the session.
           </div>
-        ))}
+        )}
+        {answers.map((a, i) => {
+          const rating = answerRating(a);
+          return (
+            <div key={i} style={{ borderBottom: i < answers.length - 1 ? `1px solid ${T.border}` : "none", paddingBottom: 18, marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 18 }}>{rating.emoji}</span>
+                  <span style={{ background: CAT_COLORS[a.question.category] + "20", color: CAT_COLORS[a.question.category], borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
+                    {CAT_LABELS[a.question.category]}
+                  </span>
+                  <span style={{ background: rating.color + "20", color: rating.color, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
+                    {rating.label}
+                  </span>
+                </div>
+                <span style={{ fontSize: 11, color: T.muted }}>
+                  {Math.round(a.durationSec)}s · {a.wordCount}w · {a.fillerCount} fillers · {a.techKeywords} tech
+                </span>
+              </div>
+              <div style={{ fontSize: 13, color: T.muted, marginBottom: 8, fontStyle: "italic", lineHeight: 1.5 }}>Q: {a.question.text}</div>
+              <div style={{ fontSize: 13, color: T.text, lineHeight: 1.7, background: `${T.border}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 8 }}>
+                {a.transcript || <span style={{ color: T.muted, fontStyle: "italic" }}>No transcript — mic may not have been active</span>}
+              </div>
+              {a.transcript && (
+                <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, color: T.muted }}>
+                    Length: <strong style={{ color: a.wordCount >= 80 ? "#22c55e" : a.wordCount >= 40 ? T.accent : "#f59e0b" }}>
+                      {a.wordCount < 40 ? "Too short" : a.wordCount > 200 ? "Too long" : "Good"}
+                    </strong>
+                  </span>
+                  <span style={{ fontSize: 11, color: T.muted }}>
+                    Fillers: <strong style={{ color: a.fillerCount > 5 ? "#ef4444" : a.fillerCount > 2 ? "#f59e0b" : "#22c55e" }}>{a.fillerCount}</strong>
+                  </span>
+                  <span style={{ fontSize: 11, color: T.muted }}>
+                    Tech depth: <strong style={{ color: a.techKeywords >= 3 ? "#22c55e" : T.muted }}>{a.techKeywords >= 3 ? "Strong" : a.techKeywords >= 1 ? "Moderate" : "Low"}</strong>
+                  </span>
+                  <span style={{ fontSize: 11, color: T.muted }}>
+                    Hint: <em style={{ color: T.accent3 }}>{a.question.hint.slice(0, 60)}…</em>
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Actions */}
+      {/* ── Actions ── */}
       <div style={{ display: "flex", gap: 14 }}>
-        <button onClick={() => { setPhase("lobby"); setAnswers([]); setQuestions([]); setQIndex(0); setTranscript(""); }} style={{ flex: 1, padding: "14px 0", background: `linear-gradient(135deg, ${T.accent}, #7c3aed)`, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: `0 4px 14px ${T.accent}40` }}>
+        <button
+          onClick={() => { setPhase("lobby"); setAnswers([]); setQuestions([]); setQIndex(0); setTranscript(""); setInterimTranscript(""); }}
+          style={{ flex: 1, padding: "14px 0", background: `linear-gradient(135deg, ${T.accent}, #7c3aed)`, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: `0 4px 14px ${T.accent}40` }}
+        >
           🔄 Start New Session
         </button>
         <button onClick={stopCamera} style={{ padding: "14px 24px", background: T.cardBg, color: T.muted, border: `1px solid ${T.border}`, borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
@@ -828,3 +1008,4 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
     </div>
   );
 }
+

@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { motion } from "framer-motion";
 import { Txt, Row, Grid, Card, Badge, Progress } from "./ui/Primitives";
 import { BarChart, LineChart, RadarChart } from "./charts/Charts";
 import { IndustryPulseTab } from "./IndustryPulseTab";
@@ -9,7 +10,37 @@ import { MockInterviewTab } from "./MockInterviewTab";
 
 export function Dashboard({ result, user, fileName, onReset, T, activeTab, resumeText }: any) {
     const { found, missing, matched, skillScore, interviewRisk, currentSalary, potentialSalary, dnaScore, peerPercentile, job, jobRole } = result;
-    const topCourses = COURSES.filter(c => missing.includes(c.skill) || found.slice(0, 2).includes(c.skill)).slice(0, 6);
+
+    // Build a map from skill name → salary boost from COURSES (case-insensitive match)
+    const courseBySkill = useMemo(() => {
+        const map: Record<string, number> = {};
+        COURSES.forEach(c => { map[c.skill.toLowerCase()] = c.salaryBoost; });
+        return map;
+    }, []);
+
+    // Salary by skill: use all found skills, estimate boost from COURSES or formula
+    const skillSalaryData = useMemo(() => {
+        const skills = found.slice(0, 8) as string[];
+        return {
+            labels: skills,
+            values: skills.map((s: string) => {
+                const boost = courseBySkill[s.toLowerCase()];
+                if (boost) return Math.round(boost / 1000); // convert to ₹K
+                // Estimate: base 60K + skill level * 3K
+                const lvl = SKILL_DB[s] || 65;
+                return Math.round(60 + lvl * 2.5);
+            }),
+        };
+    }, [found, courseBySkill]);
+
+    // Top courses for learning — broader match across all found + missing skills
+    const topCourses = useMemo(() =>
+        COURSES.filter(c => found.some((f: string) => f.toLowerCase() === c.skill.toLowerCase()) ||
+            missing.some((m: string) => m.toLowerCase() === c.skill.toLowerCase()))
+            .sort((a, b) => b.salaryBoost - a.salaryBoost)
+            .slice(0, 6),
+        [found, missing]);
+
     const radarLabels = ["Python", "ML", "Cloud", "Web", "Data", "NLP"];
 
     // Memoize ALL random values — prevents fluctuation on hover/re-render
@@ -32,18 +63,33 @@ export function Dashboard({ result, user, fileName, onReset, T, activeTab, resum
 
     // ── Stat card component — full gradient background ──
     const StatCard = ({ icon, label, value, color, color2, sub }: any) => (
-        <div style={{ background: `linear-gradient(135deg,${color},${color2 || color + "cc"})`, borderRadius: 16, padding: "20px 18px", position: "relative", overflow: "hidden", boxShadow: `0 6px 20px ${color}40` }}>
+        <motion.div
+            whileHover={{ y: -5, scale: 1.02, boxShadow: `0 15px 30px ${color}66` }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            className="glow-button"
+            style={{ background: `linear-gradient(135deg,${color},${color2 || color + "cc"})`, borderRadius: 16, padding: "20px 18px", position: "relative", overflow: "hidden", boxShadow: `0 6px 20px ${color}33`, cursor: "default" }}
+        >
             {/* background pattern */}
             <div style={{ position: "absolute", top: -20, right: -20, width: 90, height: 90, borderRadius: "50%", background: "rgba(255,255,255,0.12)" }} />
             <div style={{ position: "absolute", bottom: -30, left: -10, width: 70, height: 70, borderRadius: "50%", background: "rgba(255,255,255,0.08)" }} />
             <div style={{ position: "relative", zIndex: 1 }}>
-                <div style={{ fontSize: 26, marginBottom: 10 }}>{icon}</div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: "#fff", marginBottom: 4, letterSpacing: "-0.02em" }}>{value}</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.75)", fontWeight: 600 }}>{label}</div>
-                {sub && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)", marginTop: 3 }}>{sub}</div>}
+                <div style={{ fontSize: 26, marginBottom: 10, filter: "drop-shadow(0 2px 8px rgba(255,255,255,0.3))" }}>{icon}</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: "#fff", marginBottom: 4, letterSpacing: "-0.02em", textShadow: "0 2px 10px rgba(0,0,0,0.2)" }}>{value}</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", fontWeight: 600 }}>{label}</div>
+                {sub && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", marginTop: 3 }}>{sub}</div>}
             </div>
-        </div>
+        </motion.div>
     );
+
+    // Stagger container
+    const stagger: any = {
+        hidden: { opacity: 0 },
+        show: { opacity: 1, transition: { staggerChildren: 0.08 } }
+    };
+    const itemSlide: any = {
+        hidden: { opacity: 0, y: 20 },
+        show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+    };
 
     return (
         <div>
@@ -63,43 +109,55 @@ export function Dashboard({ result, user, fileName, onReset, T, activeTab, resum
                             <Txt sz={13} c={T.muted}>Target Role: <strong style={{ color: T.accent }}>{jobRole}</strong> · {new Date().toLocaleDateString()}</Txt>
                         </div>
                     </Row>
-                    {/* Stat cards */}
-                    <Grid cols="repeat(auto-fit,minmax(160px,1fr))" gap={14} style={{ marginBottom: 22 }}>
-                        <StatCard icon="⚡" label="Skill Analysis" value={`${dnaScore}/100`} color={T.accent} color2={T.accent2} sub="Career readiness" />
-                        <StatCard icon="✅" label="Skill Match" value={`${skillScore}%`} color={T.accent3} color2="#0d9488" sub={`${matched.length}/${job.required.length} skills`} />
-                        <StatCard icon="⚠️" label="Interview Risk" value={`${interviewRisk}%`} color={interviewRisk > 50 ? T.danger : T.warn} color2={interviewRisk > 50 ? "#b91c1c" : "#b45309"} sub={interviewRisk > 50 ? "High risk" : "Manageable"} />
-                        <StatCard icon="🎯" label="Top Percentile" value={`Top ${100 - peerPercentile}%`} color="#7c3aed" color2={T.accent2} sub="vs peers" />
-                        <StatCard icon="💰" label="Salary Potential" value={INR(potentialSalary)} color={T.accent3} color2={T.accent} sub="Full potential" />
-                    </Grid>
+                    {/* Stat cards staggered */}
+                    <motion.div variants={stagger} initial="hidden" animate="show" viewport={{ once: true }}>
+                        <Grid cols="repeat(auto-fit,minmax(160px,1fr))" gap={14} style={{ marginBottom: 22 }}>
+                            <motion.div variants={itemSlide}><StatCard icon="⚡" label="Skill Analysis" value={`${dnaScore}/100`} color={T.accent} color2={T.accent2} sub="Career readiness" /></motion.div>
+                            <motion.div variants={itemSlide}><StatCard icon="✅" label="Skill Match" value={`${skillScore}%`} color={T.accent3} color2="#0d9488" sub={`${matched.length}/${job.required.length} skills`} /></motion.div>
+                            <motion.div variants={itemSlide}><StatCard icon="⚠️" label="Interview Risk" value={`${interviewRisk}%`} color={interviewRisk > 50 ? T.danger : T.warn} color2={interviewRisk > 50 ? "#b91c1c" : "#b45309"} sub={interviewRisk > 50 ? "High risk" : "Manageable"} /></motion.div>
+                            <motion.div variants={itemSlide}><StatCard icon="🎯" label="Top Percentile" value={`Top ${100 - peerPercentile}%`} color="#7c3aed" color2={T.accent2} sub="vs peers" /></motion.div>
+                            <motion.div variants={itemSlide}><StatCard icon="💰" label="Salary Potential" value={INR(potentialSalary)} color={T.accent3} color2={T.accent} sub="Full potential" /></motion.div>
+                        </Grid>
+                    </motion.div>
                     {/* Skill insight cards */}
-                    <Grid cols="1fr 1fr" gap={16} style={{ marginBottom: 16 }}>
-                        <Card T={T}>
-                            <Txt sz={14} w={700} c={T.text} mb={12}>✅ Matched Skills ({matched.length})</Txt>
-                            <Row gap={6} wrap>{matched.length ? matched.map((s: string) => <Badge key={s} color={T.accent3}>{s}</Badge>) : <Txt c={T.muted}>None found</Txt>}</Row>
-                        </Card>
-                        <Card T={T}>
-                            <Txt sz={14} w={700} c={T.text} mb={12}>🚨 Missing Skills ({missing.length})</Txt>
-                            <Row gap={6} wrap>{missing.length ? missing.map((s: string) => <Badge key={s} color={T.danger}>{s}</Badge>) : <Badge color={T.accent3}>🎉 All matched!</Badge>}</Row>
-                        </Card>
-                        <Card T={T}>
-                            <Txt sz={14} w={700} c={T.text} mb={12}>🔍 All Detected ({found.length})</Txt>
-                            <Row gap={6} wrap>{found.map((s: string) => <Badge key={s} color={T.muted}>{s}</Badge>)}</Row>
-                        </Card>
-                        <Card T={T}>
-                            <Txt sz={14} w={700} c={T.text} mb={14}>📊 AI Assessment</Txt>
-                            {[
-                                { l: "Skill Coverage", p: skillScore, c: T.accent3 },
-                                { l: "Interview Readiness", p: 100 - interviewRisk, c: T.accent },
-                                { l: "Market Alignment", p: stable.marketAlign, c: "#8b5cf6" },
-                                { l: "Resume Quality", p: stable.resumeQual, c: T.warn },
-                            ].map(r => (
-                                <div key={r.l} style={{ marginBottom: 10 }}>
-                                    <Row justify="space-between" style={{ marginBottom: 3 }}><Txt sz={12} c={T.muted}>{r.l}</Txt><Txt sz={12} c={r.c} w={600}>{r.p}%</Txt></Row>
-                                    <Progress pct={r.p} color={r.c} h={6} T={T} />
-                                </div>
-                            ))}
-                        </Card>
-                    </Grid>
+                    <motion.div variants={stagger} initial="hidden" animate="show" viewport={{ once: true }}>
+                        <Grid cols="1fr 1fr" gap={16} style={{ marginBottom: 16 }}>
+                            <motion.div variants={itemSlide}>
+                                <Card T={T}>
+                                    <Txt sz={14} w={700} c={T.text} mb={12}>✅ Matched Skills ({matched.length})</Txt>
+                                    <Row gap={6} wrap>{matched.length ? matched.map((s: string) => <Badge key={s} color={T.accent3}>{s}</Badge>) : <Txt c={T.muted}>None found</Txt>}</Row>
+                                </Card>
+                            </motion.div>
+                            <motion.div variants={itemSlide}>
+                                <Card T={T}>
+                                    <Txt sz={14} w={700} c={T.text} mb={12}>🚨 Missing Skills ({missing.length})</Txt>
+                                    <Row gap={6} wrap>{missing.length ? missing.map((s: string) => <Badge key={s} color={T.danger}>{s}</Badge>) : <Badge color={T.accent3}>🎉 All matched!</Badge>}</Row>
+                                </Card>
+                            </motion.div>
+                            <motion.div variants={itemSlide}>
+                                <Card T={T}>
+                                    <Txt sz={14} w={700} c={T.text} mb={12}>🔍 All Detected ({found.length})</Txt>
+                                    <Row gap={6} wrap>{found.map((s: string) => <Badge key={s} color={T.muted}>{s}</Badge>)}</Row>
+                                </Card>
+                            </motion.div>
+                            <motion.div variants={itemSlide}>
+                                <Card T={T}>
+                                    <Txt sz={14} w={700} c={T.text} mb={14}>📊 AI Assessment</Txt>
+                                    {[
+                                        { l: "Skill Coverage", p: skillScore, c: T.accent3 },
+                                        { l: "Interview Readiness", p: 100 - interviewRisk, c: T.accent },
+                                        { l: "Market Alignment", p: stable.marketAlign, c: "#8b5cf6" },
+                                        { l: "Resume Quality", p: stable.resumeQual, c: T.warn },
+                                    ].map(r => (
+                                        <div key={r.l} style={{ marginBottom: 10 }}>
+                                            <Row justify="space-between" style={{ marginBottom: 3 }}><Txt sz={12} c={T.muted}>{r.l}</Txt><Txt sz={12} c={r.c} w={600}>{r.p}%</Txt></Row>
+                                            <Progress pct={r.p} color={r.c} h={6} T={T} />
+                                        </div>
+                                    ))}
+                                </Card>
+                            </motion.div>
+                        </Grid>
+                    </motion.div>
                 </div>
             )}
 
@@ -164,7 +222,12 @@ export function Dashboard({ result, user, fileName, onReset, T, activeTab, resum
                         ))}
                     </Grid>
                     <Grid cols="1fr 1fr" gap={16}>
-                        <Card T={T}><Txt sz={14} w={700} c={T.text} mb={14}>Salary by Skill (₹)</Txt><BarChart T={T} labels={topCourses.map(c => c.skill)} values={topCourses.map(c => c.salaryBoost)} colors={[T.accent, T.accent3, "#8b5cf6", T.warn, T.danger, "#ec4899"]} height={155} /></Card>
+                        <Card T={T}><Txt sz={14} w={700} c={T.text} mb={14}>Salary by Skill (₹K boost)</Txt>
+                            {skillSalaryData.labels.length > 0
+                                ? <BarChart T={T} labels={skillSalaryData.labels} values={skillSalaryData.values} colors={[T.accent, T.accent3, "#8b5cf6", T.warn, T.danger, "#ec4899", T.accent, T.accent3]} height={155} />
+                                : <Txt c={T.muted} sz={13}>Upload a resume to see skill-based salary data.</Txt>
+                            }
+                        </Card>
                         <Card T={T}><Txt sz={14} w={700} c={T.text} mb={14}>5-Year Projection (₹L)</Txt>
                             <LineChart T={T} series={[{ label: "Current Path", data: [currentSalary / 100000, ...Array(5).fill(0).map((_, i) => +((currentSalary / 100000) * (1 + i * 0.05)).toFixed(1))], color: T.warn }, { label: "Optimized", data: [currentSalary / 100000, ...Array(5).fill(0).map((_, i) => +((currentSalary / 100000) * (1 + i * 0.13)).toFixed(1))], color: T.accent3 }]} labels={["Now", "Y1", "Y2", "Y3", "Y4", "Y5"]} height={165} />
                         </Card>

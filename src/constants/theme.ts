@@ -1,54 +1,53 @@
 export const THEMES = {
     light: {
-        bg: "#f5f4f9",
-        text: "#0d0d1a",
-        muted: "#374151",        // was #6b7280 — much darker for contrast
-        subtext: "#4b5563",      // was #9ca3af — darker
-        border: "#d1cfe8",       // slightly richer border
-        navBg: "#ffffff",
-        tagBg: "#ede9f8",
-        inputBg: "#faf9ff",
-        cardBg: "#ffffff",
-        // Accents
-        accent: "#db2777",
-        accent2: "#4f46e5",
-        accent3: "#047857",      // darker emerald for contrast on light bg
-        warn: "#b45309",         // darker amber
-        danger: "#b91c1c",       // darker red
-        // Sidebar (always deep dark)
-        sidebarBg: "#0d0d1a",
+        bg: "#F8F9FA",
+        text: "#111827",
+        muted: "#9ca3af",
+        subtext: "#4b5563",
+        border: "rgba(0,0,0,0.08)",
+        borderHover: "rgba(0,0,0,0.2)",
+        navBg: "rgba(255,255,255,0.7)",
+        tagBg: "rgba(255,20,147,0.1)",
+        inputBg: "#FFFFFF",
+        cardBg: "#FFFFFF",
+        accent: "#FF1493", // Hyper Magenta
+        accent2: "#8A2BE2", // Neon Violet
+        accent3: "#00FFFF", // Electric Cyan
+        warn: "#FFB000",
+        danger: "#FF3333",
+        sidebarBg: "#05050A",
         sidebarBorder: "#1a1a2e",
-        sidebarText: "#c4c4d8",  // brighter sidebar text
+        sidebarText: "#c4c4d8",
         sidebarMuted: "#6a6a8a",
-        sidebarActive: "#fff0f8",
-        sidebarActiveText: "#0d0d1a",
+        sidebarActive: "#0F0F1A",
+        sidebarActiveText: "#FF1493",
         sidebarHover: "#1a1a2e",
-        sidebarAccent: "#ec4899",
+        sidebarAccent: "#FF1493",
     },
     dark: {
-        bg: "#0d0d1a",
-        text: "#f1f0ff",
-        muted: "#b0b8c8",        // was #94a3b8 — brighter for dark bg contrast
-        subtext: "#8892a4",      // was #64748b — brighter
-        border: "#1e293b",
-        navBg: "#111128",
-        tagBg: "#1a1a2e",
-        inputBg: "#111128",
-        cardBg: "#13132a",
-        // Accents (brighter for dark bg readability)
-        accent: "#f472b6",
-        accent2: "#818cf8",
-        accent3: "#34d399",
-        warn: "#fbbf24",
-        danger: "#f87171",
-        // Sidebar (slightly different from content)
-        sidebarBg: "#080813",
-        sidebarBorder: "#1a1a2e",
-        sidebarText: "#b0b0d0",  // bright enough to read
-        sidebarMuted: "#5a5a7a",
-        sidebarActive: "#1a1a3e",
-        sidebarActiveText: "#f472b6",
-        sidebarHover: "#13132a",
-        sidebarAccent: "#f472b6",
-    },
+        bg: "#05050A", // Space Black
+        text: "#FFFFFF", // Pure White
+        muted: "#8892B0", // Stardust Gray
+        subtext: "#E2E8F0",
+        border: "rgba(255,255,255,0.05)",
+        borderHover: "rgba(0,255,255,0.3)", // Cyan hover
+        navBg: "rgba(5,5,10,0.8)", // Glass nav overlay
+        tagBg: "rgba(255,20,147,0.15)",
+        inputBg: "#0F0F1A",
+        cardBg: "#0F0F1A", // Glass Obsidian
+        accent: "#FF1493", // Hyper Magenta
+        accentHover: "#FF00FF", // Cyber Pink hover
+        accent2: "#8A2BE2", // Neon Violet
+        accent3: "#00FFFF", // Electric Cyan
+        warn: "#FFB000",
+        danger: "#FF3333",
+        sidebarBg: "#05050A",
+        sidebarBorder: "rgba(255,255,255,0.05)",
+        sidebarText: "#8892B0",
+        sidebarMuted: "#475569",
+        sidebarActive: "rgba(255,20,147,0.1)",
+        sidebarActiveText: "#FF1493",
+        sidebarHover: "rgba(0,255,255,0.05)",
+        sidebarAccent: "#FF1493",
+    }
 };
