@@ -12,16 +12,23 @@ export function LineChart({ series, labels, height = 160, T }: any) {
     const ref = useRef<HTMLCanvasElement>(null);
     const [mouse, setMouse] = useState<{ x: number, y: number } | null>(null);
 
+    const dataHash = JSON.stringify(series) + JSON.stringify(labels);
+    const startTimeRef = useRef(performance.now());
+
+    useEffect(() => {
+        startTimeRef.current = performance.now();
+    }, [dataHash, height, T]);
+
     useEffect(() => {
         const cv = ref.current; if (!cv) return;
         const ctx = cv.getContext("2d"); if (!ctx) return;
 
         let frameId: number;
-        const startTime = performance.now();
+        const startTime = startTimeRef.current;
         const DURATION = 1200;
 
         const render = (now: number) => {
-            const elapsed = now - startTime;
+            const elapsed = Math.max(0, now - startTime);
             const rawProgress = Math.min(elapsed / DURATION, 1);
             const p = easeOutCirc(rawProgress); // fluid entrance
 
@@ -117,7 +124,7 @@ export function LineChart({ series, labels, height = 160, T }: any) {
 
         frameId = requestAnimationFrame(render);
         return () => cancelAnimationFrame(frameId);
-    }, [series, labels, height, T, mouse]);
+    }, [dataHash, height, T, mouse]);
 
     const handleHover = (e: React.MouseEvent<HTMLCanvasElement>) => {
         const rect = ref.current?.getBoundingClientRect();
@@ -137,15 +144,23 @@ export function BarChart({ labels, values, colors, height = 160, T }: any) {
     const ref = useRef<HTMLCanvasElement>(null);
     const [mouse, setMouse] = useState<{ x: number, y: number } | null>(null);
 
+    const dataHash = JSON.stringify(values) + JSON.stringify(labels);
+    const startTimeRef = useRef(performance.now());
+
+    useEffect(() => {
+        startTimeRef.current = performance.now();
+    }, [dataHash, height, T, colors]);
+
     useEffect(() => {
         const cv = ref.current; if (!cv) return;
         const ctx = cv.getContext("2d"); if (!ctx) return;
 
         let frameId: number;
-        const startTime = performance.now();
+        const startTime = startTimeRef.current;
         const DURATION = 900;
 
         const render = (now: number) => {
+            const elapsed = Math.max(0, now - startTime);
             const W = cv.offsetWidth || 400, H = height;
             cv.width = W; cv.height = H; ctx.clearRect(0, 0, W, H);
             const pad = { t: 10, r: 10, b: 36, l: 50 };
@@ -154,7 +169,7 @@ export function BarChart({ labels, values, colors, height = 160, T }: any) {
             const bw = Math.max(w / values.length - 8, 8);
 
             // Staggered entrance
-            const rawProgress = Math.min((now - startTime) / DURATION, 1);
+            const rawProgress = Math.min(elapsed / DURATION, 1);
 
             ctx.fillStyle = T.muted; ctx.font = "10px Inter,sans-serif"; ctx.textAlign = "right";
             ctx.globalAlpha = easeOutCirc(rawProgress);
@@ -167,7 +182,7 @@ export function BarChart({ labels, values, colors, height = 160, T }: any) {
 
             values.forEach((v: number, i: number) => {
                 // Staggered delay per bar
-                const barP = Math.min(Math.max((now - startTime - i * 50) / 600, 0), 1);
+                const barP = Math.min(Math.max((elapsed - i * 50) / 600, 0), 1);
                 const p = easeOutElastic(barP); // Bouncy entrance
 
                 const x = pad.l + i * (w / values.length) + (w / values.length - bw) / 2;
@@ -222,7 +237,7 @@ export function BarChart({ labels, values, colors, height = 160, T }: any) {
 
         frameId = requestAnimationFrame(render);
         return () => cancelAnimationFrame(frameId);
-    }, [labels, values, colors, height, T, mouse]);
+    }, [dataHash, height, T, colors, mouse]);
 
     return <canvas
         ref={ref}
@@ -238,19 +253,28 @@ export function BarChart({ labels, values, colors, height = 160, T }: any) {
 // ─── Fluid Radar Chart with Rotation ──────────────────────────────────────────
 export function RadarChart({ labels, values, color, size = 200, T }: any) {
     const ref = useRef<HTMLCanvasElement>(null);
+
+    const dataHash = JSON.stringify(values) + JSON.stringify(labels);
+    const startTimeRef = useRef(performance.now());
+
+    useEffect(() => {
+        startTimeRef.current = performance.now();
+    }, [dataHash, size, color, T]);
+
     useEffect(() => {
         const cv = ref.current; if (!cv) return;
         const ctx = cv.getContext("2d"); if (!ctx) return;
 
         let frameId: number;
-        const startTime = performance.now();
+        const startTime = startTimeRef.current;
 
         const render = (now: number) => {
+            const elapsed = Math.max(0, now - startTime);
             cv.width = size; cv.height = size; ctx.clearRect(0, 0, size, size);
 
-            const p = easeOutCirc(Math.min((now - startTime) / 1000, 1));
+            const p = easeOutCirc(Math.min(elapsed / 1000, 1));
             // Slow continuous rotation after entrance
-            const rotOffset = p === 1 ? (now - startTime - 1000) * 0.0002 : 0;
+            const rotOffset = p === 1 ? (elapsed - 1000) * 0.0002 : 0;
 
             const cx = size / 2, cy = size / 2, r = size / 2 - 30, n = labels.length;
             const angle = (i: number) => -Math.PI / 2 + i * 2 * Math.PI / n + rotOffset;
@@ -292,7 +316,7 @@ export function RadarChart({ labels, values, color, size = 200, T }: any) {
 
         frameId = requestAnimationFrame(render);
         return () => cancelAnimationFrame(frameId);
-    }, [labels, values, color, size, T]);
+    }, [dataHash, size, color, T]);
 
     return <canvas ref={ref} style={{ width: size, height: size }} />;
 }
@@ -300,17 +324,24 @@ export function RadarChart({ labels, values, color, size = 200, T }: any) {
 // ─── Fluid Donut Chart ────────────────────────────────────────────────────────
 export function DonutChart({ value, color, size = 120, label, T }: any) {
     const ref = useRef<HTMLCanvasElement>(null);
+
+    const startTimeRef = useRef(performance.now());
+    useEffect(() => {
+        startTimeRef.current = performance.now();
+    }, [value, size, color, T]);
+
     useEffect(() => {
         const cv = ref.current; if (!cv) return;
         const ctx = cv.getContext("2d"); if (!ctx) return;
 
         let frameId: number;
-        const startTime = performance.now();
+        const startTime = startTimeRef.current;
 
         const render = (now: number) => {
+            const elapsed = Math.max(0, now - startTime);
             cv.width = size; cv.height = size; ctx.clearRect(0, 0, size, size);
 
-            const p = easeOutCirc(Math.min((now - startTime) / 1000, 1));
+            const p = easeOutCirc(Math.min(elapsed / 1000, 1));
 
             const cx = size / 2, cy = size / 2, r = size / 2 - 8;
             const start = -Math.PI / 2;
@@ -342,7 +373,7 @@ export function DonutChart({ value, color, size = 120, label, T }: any) {
 
         frameId = requestAnimationFrame(render);
         return () => cancelAnimationFrame(frameId);
-    }, [value, color, size, label, T]);
+    }, [value, size, color, label, T]);
 
     return <canvas ref={ref} style={{ width: size, height: size }} />;
 }

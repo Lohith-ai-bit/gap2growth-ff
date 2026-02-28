@@ -641,10 +641,9 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
 
             <button
               onClick={startSession}
-              disabled={!camEnabled}
-              style={{ padding: "16px 0", background: camEnabled ? `linear-gradient(135deg, ${T.accent}, #7c3aed)` : T.border, color: camEnabled ? "#fff" : T.muted, border: "none", borderRadius: 14, fontSize: 16, fontWeight: 800, cursor: camEnabled ? "pointer" : "not-allowed", boxShadow: camEnabled ? `0 6px 20px ${T.accent}50` : "none", transition: "all .3s" }}
+              style={{ padding: "16px 0", background: `linear-gradient(135deg, ${T.accent}, #7c3aed)`, color: "#fff", border: "none", borderRadius: 14, fontSize: 16, fontWeight: 800, cursor: "pointer", boxShadow: `0 6px 20px ${T.accent}50`, transition: "all .3s", width: "100%", marginTop: 8 }}
             >
-              {camEnabled ? "🚀 Start Interview Session" : "Enable Camera First"}
+              🚀 Start Interview Session
             </button>
           </div>
         </div>
@@ -774,18 +773,26 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
                   </span>
                 </div>
               </div>
-              <div style={{ fontSize: 14, color: T.text, lineHeight: 1.8, minHeight: 80 }}>
-                {(transcript || interimTranscript)
-                  ? (
-                    <span>
-                      {transcript}
-                      {/* Interim shown at full opacity inline — feels instant, not "pending" */}
-                      <span style={{ color: T.text, opacity: interimTranscript ? 1 : 0 }}>{interimTranscript}</span>
-                    </span>
-                  )
-                  : <span style={{ color: T.muted }}>{isListening ? "Speak now — words appear as you talk…" : "Enable microphone to begin"}</span>
-                }
-              </div>
+              <textarea
+                value={transcript + (interimTranscript ? " " + interimTranscript : "")}
+                onChange={(e) => {
+                  setTranscript(e.target.value);
+                  setInterimTranscript("");
+                }}
+                placeholder={isListening ? "Speak now or type your answer..." : "Type your answer here or enable microphone to begin..."}
+                style={{
+                  width: "100%",
+                  minHeight: 120,
+                  background: "transparent",
+                  border: "none",
+                  color: T.text,
+                  fontSize: 14,
+                  lineHeight: 1.8,
+                  outline: "none",
+                  resize: "vertical",
+                  fontFamily: "inherit"
+                }}
+              />
               {(transcript || interimTranscript) && (
                 <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${T.border}`, display: "flex", gap: 16, flexWrap: "wrap" }}>
                   {/* Count interim words too so stats update live as you speak */}
