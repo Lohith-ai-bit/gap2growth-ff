@@ -147,10 +147,14 @@ function scoreAnswers(answers: AnswerRecord[]): SoftSkillScores {
   if (!answers.length) return { clarity: 0, confidence: 0, depth: 0, fluency: 0, overall: 0 };
 
   const totalWords = answers.reduce((s, a) => s + a.wordCount, 0);
+  if (totalWords === 0) {
+    return { clarity: 0, confidence: 0, depth: 0, fluency: 0, overall: 0 };
+  }
+
   const avgWords = totalWords / answers.length;
   const totalFillers = answers.reduce((s, a) => s + a.fillerCount, 0);
   const totalTech = answers.reduce((s, a) => s + a.techKeywords, 0);
-  const totalDuration = answers.reduce((s, a) => s + a.durationSec, 0);
+  const totalDuration = Math.max(answers.reduce((s, a) => s + a.durationSec, 0), 0.1);
 
   const clarity = Math.round(Math.min((avgWords / 120) * 100, 100));
   const fillerRate = totalWords > 0 ? totalFillers / totalWords : 0;
@@ -242,6 +246,7 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
   const [sessionStarted, setSessionStarted] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(true);
 
   // ── Refs (no re-renders) ──
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -329,7 +334,13 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
   const toggleMic = useCallback(() => {
     if (!streamRef.current) return;
     streamRef.current.getAudioTracks().forEach(t => { t.enabled = !t.enabled; });
-    setMicEnabled(m => !m);
+    setMicEnabled(m => {
+      // Re-initialize recognition if they turn the mic back on and it got stuck
+      if (!m && sessionActiveRef.current && !isListeningRef.current) {
+        startRecognitionRef.current();
+      }
+      return !m;
+    });
   }, []);
 
   const stopCamera = useCallback(() => {
@@ -346,8 +357,10 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
       console.warn("[Interview] SpeechRecognition not supported.");
+      setSpeechSupported(false);
       return;
     }
+    setSpeechSupported(true);
     // Clean up previous instance
     try { recognitionRef.current?.abort(); } catch { }
 
@@ -575,6 +588,12 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
             {camError && (
               <div style={{ marginTop: 10, padding: "10px 14px", background: "#ef444420", border: "1px solid #ef444450", borderRadius: 10, fontSize: 12, color: "#ef4444" }}>
                 ⚠️ {camError}
+              </div>
+            )}
+
+            {!speechSupported && (
+              <div style={{ marginTop: 10, padding: "10px 14px", background: "#f59e0b20", border: "1px solid #f59e0b50", borderRadius: 10, fontSize: 12, color: "#f59e0b" }}>
+                ⚠️ Speech Recognition is not supported in your browser. You can still type your answers manually.
               </div>
             )}
 
@@ -836,10 +855,12 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
   const coachingTips: Record<string, string> = {
     clarity: scores.clarity >= 70
       ? "✅ Great answer length — you stayed focused and concise."
-      : scores.clarity < 40
-        ? "⚠️ Answers were too short. Aim for 100–150 words per answer using the STAR method."
-        : "💡 Try structuring each answer with: Situation → Task → Action → Result.",
-    confidence: scores.confidence >= 70
+      : answers.length && avgWords === 0
+        ? "⚠️ No speech detected. Please use your microphone or type your answers."
+        : scores.clarity < 40
+          ? "⚠️ Answers were too short. Aim for 100–150 words per answer using the STAR method."
+          : "💡 Try structuring each answer with: Situation → Task → Action → Result.",
+    confidence: scores.confidence >= 70 && avgWords > 0
       ? "✅ Low filler word usage — you came across as confident and composed."
       : totalFillers > 15
         ? `⚠️ High filler words (${totalFillers} total). Practice pausing silently instead of saying "um" or "like".`
@@ -851,7 +872,9 @@ export function MockInterviewTab({ T, jobRole, missing, found, skillScore, resum
       ? "⚠️ You spoke quickly — slow down slightly for clarity and emphasis."
       : avgWPM < 80 && avgWPM > 0
         ? "⚠️ Speaking pace was slow. Aim for 120–140 WPM to sound natural."
-        : "✅ Good speaking pace — natural and easy to follow.",
+        : avgWords > 0
+          ? "✅ Good speaking pace — natural and easy to follow."
+          : "⚠️ Not enough data to assess fluency.",
   };
 
   const strengths = Object.entries(coachingTips).filter(([, v]) => v.startsWith("✅")).map(([k]) => k);
