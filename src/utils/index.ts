@@ -243,32 +243,57 @@ export const storeToken = (t: string) => localStorage.setItem("g2g_token", t);
 export const clearToken = () => localStorage.removeItem("g2g_token");
 
 export async function register(name: string, email: string, password: string) {
-    const res = await fetch(`${AI_BACKEND}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Registration failed.");
+    let res: Response;
+    try {
+        res = await fetch(`${AI_BACKEND}/auth/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email, password }),
+        });
+    } catch {
+        throw new Error("Unable to reach the server. Please check your connection and try again.");
+    }
+    let data: any;
+    try {
+        data = await res.json();
+    } catch {
+        throw new Error("Server returned an unexpected response. Please try again.");
+    }
+    if (!res.ok) throw new Error(data.detail || data.error || "Registration failed.");
     return data as { token: string; user: { id: string; name: string; email: string } };
 }
 
 export async function login(email: string, password: string) {
-    const res = await fetch(`${AI_BACKEND}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Invalid email or password.");
+    let res: Response;
+    try {
+        res = await fetch(`${AI_BACKEND}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+        });
+    } catch {
+        throw new Error("Unable to reach the server. Please check your connection and try again.");
+    }
+    let data: any;
+    try {
+        data = await res.json();
+    } catch {
+        throw new Error("Server returned an unexpected response. Please try again.");
+    }
+    if (!res.ok) throw new Error(data.detail || data.error || "Invalid email or password.");
     return data as { token: string; user: { id: string; name: string; email: string } };
 }
 
 export async function getMe(token: string) {
-    const res = await fetch(`${AI_BACKEND}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(3000),
-    });
+    let res: Response;
+    try {
+        res = await fetch(`${AI_BACKEND}/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(3000),
+        });
+    } catch {
+        throw new Error("Unable to reach the server.");
+    }
     if (!res.ok) throw new Error("Session expired.");
     return res.json() as Promise<{ id: string; name: string; email: string }>;
 }
