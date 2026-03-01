@@ -232,7 +232,11 @@ export function analyzeResume(text: string, jobRole: string) {
 }
 
 // ─── Auth & Session helpers ──────────────────────────────────────────────────
-const AI_BACKEND = "https://gap2growth-ff.up.railway.app";
+const DEFAULT_AI_BACKEND = "https://gap2growth-ff.up.railway.app";
+const AI_BACKEND = (
+    import.meta.env.VITE_AI_BACKEND ||
+    (import.meta.env.PROD ? "/api/ai" : DEFAULT_AI_BACKEND)
+).replace(/\/$/, "");
 
 export const getStoredToken = (): string | null => localStorage.getItem("g2g_token");
 export const storeToken = (t: string) => localStorage.setItem("g2g_token", t);
