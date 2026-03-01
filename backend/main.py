@@ -62,8 +62,10 @@ app = FastAPI(title="Gap2Growth AI", version="3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],       # allow all origins — safe for local dev
+    allow_credentials=True,    # explicitly allow credentials (cookies, auth headers)
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 
