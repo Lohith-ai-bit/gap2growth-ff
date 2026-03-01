@@ -5,7 +5,13 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
     plugins: [react()],
     server: {
-        allowedHosts: ['devserver-main--gap2growth.netlify.app', 'all']
+        allowedHosts: ['devserver-main--gap2growth.netlify.app', 'all'],
+        proxy: {
+            '/api': {
+                target: 'http://localhost:8888',
+                changeOrigin: true,
+            },
+        },
     },
     optimizeDeps: {
         include: ["pdfjs-dist"],

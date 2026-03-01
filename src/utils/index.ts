@@ -232,49 +232,72 @@ export function analyzeResume(text: string, jobRole: string) {
 }
 
 // ─── Auth & Session helpers ──────────────────────────────────────────────────
-const AI_BACKEND = "https://gap2growth-ff.up.railway.app";
+const AI_BACKEND = "/api";
 
 export const getStoredToken = (): string | null => localStorage.getItem("g2g_token");
 export const storeToken = (t: string) => localStorage.setItem("g2g_token", t);
 export const clearToken = () => localStorage.removeItem("g2g_token");
 
+function networkError(): never {
+    throw new Error("Unable to reach the server. Please check your connection and try again.");
+}
+
 export async function register(name: string, email: string, password: string) {
-    const res = await fetch(`${AI_BACKEND}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
-    });
+    let res: Response;
+    try {
+        res = await fetch(`${AI_BACKEND}/auth/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email, password }),
+        });
+    } catch {
+        networkError();
+    }
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Registration failed.");
     return data as { token: string; user: { id: string; name: string; email: string } };
 }
 
 export async function login(email: string, password: string) {
-    const res = await fetch(`${AI_BACKEND}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-    });
+    let res: Response;
+    try {
+        res = await fetch(`${AI_BACKEND}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+        });
+    } catch {
+        networkError();
+    }
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Invalid email or password.");
     return data as { token: string; user: { id: string; name: string; email: string } };
 }
 
 export async function getMe(token: string) {
-    const res = await fetch(`${AI_BACKEND}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(3000),
-    });
+    let res: Response;
+    try {
+        res = await fetch(`${AI_BACKEND}/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(3000),
+        });
+    } catch {
+        throw new Error("Session expired.");
+    }
     if (!res.ok) throw new Error("Session expired.");
     return res.json() as Promise<{ id: string; name: string; email: string }>;
 }
 
 export async function getAnalysisHistory(token: string) {
-    const res = await fetch(`${AI_BACKEND}/analyses`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return [];
-    return res.json() as Promise<any[]>;
+    try {
+        const res = await fetch(`${AI_BACKEND}/analyses`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return [];
+        return res.json() as Promise<any[]>;
+    } catch {
+        return [];
+    }
 }
 
 // ─── AI-powered analyzer (calls Python backend) ───────────────────────────
